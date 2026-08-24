@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">RoamADB 연결 다리 아이콘</title>
+  <desc id="desc">휴대폰과 PC를 파란 연결선으로 잇고 중앙의 녹색 점으로 준비 상태를 나타낸다.</desc>
+  <rect width="512" height="512" rx="104" fill="#0B1220"/>
+  <path d="M132 315 C132 173 380 173 380 315" fill="none" stroke="#38BDF8" stroke-width="34" stroke-linecap="round"/>
+  <rect x="78" y="240" width="112" height="176" rx="22" fill="#F8FAFC"/>
+  <rect x="96" y="264" width="76" height="116" rx="8" fill="#0B1220"/>
+  <rect x="122" y="394" width="24" height="8" rx="4" fill="#0B1220"/>
+  <rect x="332" y="250" width="124" height="104" rx="12" fill="#F8FAFC"/>
+  <rect x="352" y="270" width="84" height="62" rx="5" fill="#0B1220"/>
+  <path d="M378 354 H410 V374 H430 V390 H358 V374 H378 Z" fill="#F8FAFC"/>
+  <circle cx="256" cy="196" r="25" fill="#22C55E" stroke="#F8FAFC" stroke-width="9"/>
+</svg>

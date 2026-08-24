@@ -21,6 +21,14 @@ The Android app pins the SHA-256 fingerprint supplied out of band by the Gateway
 4. Gateway consumes the code once and stores the public key.
 5. Reuse, expiry, malformed keys, and excessive attempts are rejected.
 
+The Windows GUI can encode the same out-of-band values as a QR URI:
+
+```text
+roamadb://register?v=1&host=<tailnet-ip>&port=47156&fingerprint=<sha256-hex>&code=<6-digits>&mode=existing-vpn-adb-only&expires=<unix-seconds>
+```
+
+The Android parser accepts only the exact scheme, version, field set, Tailscale IPv4 range, SHA-256 fingerprint, six-digit code, supported mode, and short future expiry. The QR contains no private key or Tailscale credential.
+
 ## Authentication
 
 1. Phone sends `hello` with its registered device ID.
@@ -54,7 +62,7 @@ adb connect 127.0.0.1:47157
 adb pair 127.0.0.1:47158 <code-shown-by-Android>
 ```
 
-The current Android UI publishes the `connect` relay only. The `pairing` contract and Gateway endpoint exist, but the Android pairing UI remains a real-device follow-up.
+The Android UI can publish either relay. The user manually enters Android's temporary pairing port for `pairing`, or saves the normal Wireless debugging connect port for `connect`. Both targets remain fixed to Android loopback. First-time real-device pairing remains a field-validation item.
 
 ## Raw-mode rules
 

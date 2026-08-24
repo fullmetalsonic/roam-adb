@@ -1,6 +1,9 @@
 RoamADB
 Copyright 2026 fullmetalsonic and RoamADB contributors
 
-This technical spike currently contains original RoamADB source plus package
-dependencies resolved by Gradle and the .NET SDK. Tailscale, LADB, AOSP adb,
-and scrcpy source code is not included in the repository at this stage.
+This technical spike contains original RoamADB source plus package dependencies
+resolved by Gradle, NuGet, and the .NET SDK. QRCoder is linked under the MIT
+License. Google Code Scanner is called through Google Play services. Tailscale,
+LADB, AOSP adb, and scrcpy source code is not included in the repository.
+The Windows installer is generated with Inno Setup; Inno Setup itself is not
+redistributed in this repository.

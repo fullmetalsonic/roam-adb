@@ -28,6 +28,7 @@ public sealed class GatewayServer(
   public int BoundPort { get; private set; }
   public string Fingerprint => GatewayCertificateProvider.GetSha256Fingerprint(certificate);
   public event Action<Exception>? ClientFault;
+  public event Action<DeviceRecord>? DeviceRegistered;
   public event Action<RelayPublishedEvent>? RelayPublished;
 
   public async Task RunAsync(CancellationToken cancellationToken)
@@ -218,6 +219,14 @@ public sealed class GatewayServer(
         request.PublicKey,
         DateTimeOffset.UtcNow),
       cancellationToken).ConfigureAwait(false);
+
+    var registeredDevice = await deviceRegistry.FindAsync(
+      request.DeviceId!,
+      cancellationToken).ConfigureAwait(false);
+    if (registeredDevice is not null)
+    {
+      DeviceRegistered?.Invoke(registeredDevice);
+    }
 
     await ProtocolCodec.WriteAsync(
       ssl,

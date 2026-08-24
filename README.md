@@ -1,55 +1,65 @@
 # RoamADB
 
-RoamADB is a secure remote Android Debug Bridge project for connecting an Android phone away from home to the user's own Windows PC.
+RoamADB connects an Android phone away from home to the owner's Windows PC for on-demand remote ADB. The current recommended path uses the official Tailscale apps as the private network; RoamADB adds its own PC identity, phone registration, and local-only ADB relay.
 
-## Components
+## What is included
 
-- **RoamADB**: Android application that the phone owner explicitly turns on when remote debugging is needed.
-- **RoamADB Gateway**: Windows program that authenticates the phone and exposes authenticated local-only ADB relay ports to development tools.
+- **RoamADB for Android**: QR/manual PC registration, first-time Wireless ADB pairing relay, normal ADB relay, foreground notification, and Quick Settings tile.
+- **RoamADB Gateway for Windows**: normal desktop window with diagnostics, start/stop, two-minute QR and six-digit registration code, registered-phone removal, `adb pair/connect/disconnect/devices`, and optional scrcpy launch.
+- **Security boundary**: the Gateway listens on one exact Tailscale IPv4. ADB relay ports are exposed only on PC loopback (`127.0.0.1:47157` and `127.0.0.1:47158`) after phone-key authentication.
 
-## Current status
+The program does not change router port forwarding, Windows Firewall, DMZ, Tailscale accounts, or Android's system Wireless debugging approvals.
 
-This repository is in the third technical-spike phase. The implemented scope is intentionally narrow:
+## Download
 
-- loopback-only Gateway listener by default, plus an explicit exact-Tailscale-IP listener with `--tailnet`;
-- self-signed Gateway identity stored in the Windows user certificate store;
-- one-time registration code;
-- registered phone public-key verification;
-- challenge-response authentication;
-- Android connection state, manually entered Wireless ADB connect port, and user-controlled ON/OFF;
-- a Quick Settings tile and user-requested foreground service;
-- an adaptive connection-bridge icon and backup-disabled app storage.
-- an authenticated, byte-transparent phone-loopback ↔ Gateway-loopback TCP relay;
-- loopback ADB endpoints that exist only while an authenticated phone publishes them.
-- three Android connection choices, with the existing-Tailscale / ADB-only path as the current recommended mode;
-- an Android VPN-transport preflight that never starts or replaces the external Tailscale app.
+The [`v0.1.1-spike` prerelease](https://github.com/fullmetalsonic/roam-adb/releases/tag/v0.1.1-spike) contains:
 
-The raw relay passes its automated binary round-trip test. The self-contained Gateway has also passed an exact-tailnet bind and pinned-TLS status probe on the current PC. The app does not embed Tailscale yet: the current mode assumes the official Tailscale apps are already connected on phone and PC. Router port forwarding, automatic ADB discovery, first-pairing UI, and real-device ADB validation are not complete. Do not expose ADB port 5555 or place the PC in router DMZ.
+- `RoamADB-Gateway-Setup-0.1.1-spike.exe` — recommended per-user Windows installer;
+- `RoamADB-Gateway-Portable-0.1.1-spike.exe` — no-install Windows x64 program;
+- `RoamADB-0.1.1-spike-debug.apk` — Android 16 / API 36 or newer;
+- `SHA256SUMS.txt` — download integrity values.
 
-## Download and try the spike
+The Windows files are not code-signed and the APK is debug-signed, so Windows SmartScreen and Android sideload warnings are expected. This is a GitHub technical prerelease, not a Play Store release.
 
-The [`v0.1.0-spike` pre-release](https://github.com/fullmetalsonic/roam-adb/releases/tag/v0.1.0-spike) contains:
+## First setup
 
-- `RoamADB-0.1.0-spike-debug.apk` for Android 15 / API 35 or newer;
-- `RoamADBGateway-0.1.0-spike-win-x64.exe`, a self-contained Windows x64 executable;
-- `SHA256SUMS.txt` for download verification.
+1. Connect the official Tailscale app on the PC and phone to the same tailnet.
+2. Install and open **RoamADB Gateway**. A normal Windows window must remain visible.
+3. Press **Gateway 켜기**, then **새 등록 코드와 QR 만들기**.
+4. Install/open RoamADB on Android and keep **기존 VPN 경유 · ADB 전용 (권장)** selected.
+5. Press **PC 등록 QR 스캔**. Manual address, fingerprint, and code fields remain available if scanning is unavailable.
+6. For the first ADB pairing only, open Android **Developer options → Wireless debugging → Pair device with pairing code**. Enter its temporary pairing port in RoamADB and open the pairing relay. Enter Android's six-digit pairing code in Windows **ADB 작업 → ADB 페어링**.
+7. Save the normal Wireless debugging connect port in RoamADB. Turn on remote debugging, then press **ADB 연결** in the Windows Gateway.
 
-This is a technical-spike build, not a finished consumer release. On both devices, connect the official Tailscale app to the same tailnet first. Run `RoamADBGateway.exe register --tailnet` for initial registration, then use `run --tailnet` for normal sessions. Follow the detailed Korean guide in [`docs/기존_Tailscale_ADB_전용_모드.md`](docs/기존_Tailscale_ADB_전용_모드.md). The APK is debug-signed and the Fold8 external-network ADB path still requires real-device validation.
+Later sessions need only Tailscale on both devices, Gateway on the PC, RoamADB ON on the phone, and **ADB 연결** on the PC. See the detailed Korean guide: [`docs/기존_Tailscale_ADB_전용_모드.md`](docs/기존_Tailscale_ADB_전용_모드.md).
+
+## Verification status
+
+- Gateway .NET build and 14 unit/integration tests: PASS.
+- Android unit tests, debug APK build, and lint: PASS.
+- Actual Windows installer → installed GUI launch → normal close → uninstall: PASS.
+- Actual local Tailscale address, registration countdown, and QR rendering in the Windows GUI: PASS.
+- Fold8 Android 17 / One UI 9 external-network ADB end-to-end test: **field validation required**.
+
+Do not expose ADB port 5555, forward the loopback relay ports, or place the PC in router DMZ.
 
 ## Repository layout
 
 ```text
 android/                  Android application and libraries
-src/gateway/              RoamADB Gateway production projects
-tests/gateway/            Gateway automated test runner
-docs/                     Product, security, test, and build documents
+assets/                   Shared app icon source and generated Windows assets
+installer/                Per-user Inno Setup definition
+src/gateway/              Windows desktop, CLI, and Gateway Core projects
+tests/gateway/            Gateway unit/integration test runner
+docs/                     Product, security, test, release, and handover documents
 protocol/                 Cross-platform wire-protocol specification
+scripts/                  Reproducible build and packaging scripts
 ```
 
 ## Local build
 
-The project-local .NET SDK is ignored by Git. See `docs/개발_빌드_가이드.md` and `docs/기존_Tailscale_ADB_전용_모드.md` for reproducible setup and verification commands. The current verified commands pass the Gateway 13/13 test suite and the Android `test assembleDebug lintDebug` build.
+Run `scripts/test-gateway.ps1`, `scripts/build-android.ps1`, `scripts/build-installer.ps1`, and `scripts/package-release.ps1`. Full prerequisites and output paths are in [`docs/개발_빌드_가이드.md`](docs/개발_빌드_가이드.md).
 
 ## License
 
-Original RoamADB code is licensed under Apache License 2.0. Third-party components retain their own notices and license obligations.
+Original RoamADB code is licensed under Apache License 2.0. QRCoder is MIT-licensed. Other package and SDK notices are recorded in [`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md).

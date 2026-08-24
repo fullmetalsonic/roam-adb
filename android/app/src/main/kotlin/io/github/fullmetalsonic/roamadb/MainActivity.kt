@@ -32,6 +32,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -46,15 +47,44 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.fullmetalsonic.roamadb.model.ConnectionState
 import io.github.fullmetalsonic.roamadb.model.ConnectionMode
+import io.github.fullmetalsonic.roamadb.model.PairingRelayState
+import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
+import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
+import com.google.mlkit.vision.barcode.common.Barcode
 
 class MainActivity : ComponentActivity() {
     private val mainViewModel: MainViewModel by viewModels()
+    private val qrScanner by lazy {
+        val options = GmsBarcodeScannerOptions.Builder()
+            .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
+            .enableAutoZoom()
+            .build()
+        GmsBarcodeScanning.getClient(this, options)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             MaterialTheme {
-                RoamAdbScreen(mainViewModel)
+                RoamAdbScreen(
+                    mainViewModel = mainViewModel,
+                    onScanQr = {
+                        qrScanner.startScan()
+                            .addOnSuccessListener { barcode ->
+                                val rawValue = barcode.rawValue
+                                if (rawValue.isNullOrBlank()) {
+                                    mainViewModel.reportQrScannerError(getString(R.string.qr_scan_empty))
+                                } else {
+                                    mainViewModel.applyRegistrationQr(rawValue)
+                                }
+                            }
+                            .addOnFailureListener { throwable ->
+                                mainViewModel.reportQrScannerError(
+                                    throwable.message ?: getString(R.string.qr_scan_failed),
+                                )
+                            }
+                    },
+                )
             }
         }
     }
@@ -62,11 +92,16 @@ class MainActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun RoamAdbScreen(mainViewModel: MainViewModel = viewModel()) {
+private fun RoamAdbScreen(
+    mainViewModel: MainViewModel = viewModel(),
+    onScanQr: () -> Unit,
+) {
     val state by mainViewModel.connectionState.collectAsStateWithLifecycle()
     val pcRegistered by mainViewModel.pcRegistered.collectAsStateWithLifecycle()
     val connectionMode by mainViewModel.connectionMode.collectAsStateWithLifecycle()
     val savedAdbConnectPort by mainViewModel.adbConnectPort.collectAsStateWithLifecycle()
+    val registrationDraft by mainViewModel.registrationDraft.collectAsStateWithLifecycle()
+    val pairingState by mainViewModel.pairingState.collectAsStateWithLifecycle()
     val notificationPermission = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { granted ->
@@ -118,6 +153,8 @@ private fun RoamAdbScreen(mainViewModel: MainViewModel = viewModel()) {
                     mainViewModel = mainViewModel,
                     registering = state is ConnectionState.Starting,
                     connectionMode = connectionMode,
+                    registrationDraft = registrationDraft,
+                    onScanQr = onScanQr,
                 )
             } else {
                 ActiveModeCard(connectionMode)
@@ -125,6 +162,12 @@ private fun RoamAdbScreen(mainViewModel: MainViewModel = viewModel()) {
                     savedPort = savedAdbConnectPort,
                     enabled = !state.isRunning,
                     onSave = mainViewModel::saveAdbConnectPort,
+                )
+                PairingRelayCard(
+                    pairingState = pairingState,
+                    normalRelayRunning = state.isRunning,
+                    onStart = mainViewModel::startPairing,
+                    onStop = mainViewModel::stopPairing,
                 )
                 OutlinedButton(
                     onClick = mainViewModel::clearRegistration,
@@ -282,6 +325,69 @@ private fun AdbPortCard(
 }
 
 @Composable
+private fun PairingRelayCard(
+    pairingState: PairingRelayState,
+    normalRelayRunning: Boolean,
+    onStart: (String) -> Unit,
+    onStop: () -> Unit,
+) {
+    var pairingPort by remember { mutableStateOf("") }
+    val statusText = when (pairingState) {
+        PairingRelayState.Off -> androidx.compose.ui.res.stringResource(R.string.pairing_status_off)
+        PairingRelayState.Starting -> androidx.compose.ui.res.stringResource(R.string.pairing_status_starting)
+        is PairingRelayState.Ready -> androidx.compose.ui.res.stringResource(
+            R.string.pairing_status_ready,
+            pairingState.pcLoopbackPort,
+        )
+        PairingRelayState.PcConnected -> androidx.compose.ui.res.stringResource(R.string.pairing_status_pc_connected)
+        is PairingRelayState.Error -> pairingState.detail
+    }
+
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                text = androidx.compose.ui.res.stringResource(R.string.pairing_title),
+                style = MaterialTheme.typography.titleLarge,
+            )
+            Text(androidx.compose.ui.res.stringResource(R.string.pairing_description))
+            Text(
+                text = statusText,
+                style = MaterialTheme.typography.labelLarge,
+            )
+            OutlinedTextField(
+                value = pairingPort,
+                onValueChange = { pairingPort = it.filter(Char::isDigit).take(5) },
+                label = { Text(androidx.compose.ui.res.stringResource(R.string.adb_pairing_port)) },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                enabled = !pairingState.isRunning && !normalRelayRunning,
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Button(
+                onClick = {
+                    if (pairingState.isRunning) onStop() else onStart(pairingPort)
+                },
+                enabled = pairingState.isRunning || (!normalRelayRunning && pairingPort.isNotBlank()),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    androidx.compose.ui.res.stringResource(
+                        if (pairingState.isRunning) R.string.stop_pairing_relay else R.string.start_pairing_relay,
+                    ),
+                )
+            }
+            Text(
+                text = androidx.compose.ui.res.stringResource(R.string.pairing_pc_step),
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+    }
+}
+
+@Composable
 private fun StatusCard(state: ConnectionState) {
     val status = when (state) {
         ConnectionState.SetupRequired -> R.string.status_setup_required
@@ -341,11 +447,22 @@ private fun RegistrationCard(
     mainViewModel: MainViewModel,
     registering: Boolean,
     connectionMode: ConnectionMode,
+    registrationDraft: RegistrationDraft?,
+    onScanQr: () -> Unit,
 ) {
     var host by remember { mutableStateOf("") }
     var port by remember { mutableStateOf("47156") }
     var fingerprint by remember { mutableStateOf("") }
     var code by remember { mutableStateOf("") }
+
+    LaunchedEffect(registrationDraft) {
+        registrationDraft?.let { draft ->
+            host = draft.host
+            port = draft.port
+            fingerprint = draft.fingerprint
+            code = draft.registrationCode
+        }
+    }
 
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
@@ -368,6 +485,17 @@ private fun RegistrationCard(
             if (connectionMode == ConnectionMode.EMBEDDED_SECURE_NETWORK) {
                 WarningCard(androidx.compose.ui.res.stringResource(R.string.mode_embedded_unavailable))
             }
+            Button(
+                onClick = onScanQr,
+                enabled = !registering && connectionMode == ConnectionMode.EXISTING_VPN_ADB_ONLY,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(androidx.compose.ui.res.stringResource(R.string.scan_registration_qr))
+            }
+            Text(
+                text = androidx.compose.ui.res.stringResource(R.string.qr_manual_fallback),
+                style = MaterialTheme.typography.bodySmall,
+            )
             OutlinedTextField(
                 value = host,
                 onValueChange = { host = it },

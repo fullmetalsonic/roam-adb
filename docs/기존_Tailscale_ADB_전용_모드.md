@@ -1,85 +1,81 @@
 # 기존 Tailscale 경유 · ADB 전용 모드
 
-## 1. 현재 판정
+## 1. 사용 전제
 
-이 모드는 2026-08-25 코드와 현재 Windows PC에서 구현·검증됐다. 휴대폰과 PC의 공식 Tailscale 앱이 이미 같은 tailnet에 연결됐다는 전제에서 RoamADB는 다음만 담당한다.
+PC와 휴대폰의 공식 Tailscale 앱이 같은 tailnet에 이미 연결돼 있어야 한다. RoamADB는 Tailscale을 켜거나 계정에 로그인하지 않고, 그 사설 경로 위에서 다음을 담당한다.
 
 - Gateway 인증서 SHA-256 고정
-- 1회용 코드로 휴대폰 등록
+- 2분·1회용 코드와 QR로 휴대폰 등록
 - 휴대폰 ECDSA challenge-response 인증
-- PC `adb.exe`와 휴대폰 loopback 무선 ADB 사이의 투명 TCP 중계
-
-RoamADB Android 앱은 `VpnService`를 실행하거나 Tailscale을 끄고 켜지 않는다. 따라서 공식 Tailscale 앱과 VPN 자리를 두고 충돌하지 않는다.
-
-## 2. 보안 경계
+- PC loopback과 휴대폰 loopback 무선 ADB 사이의 투명 TCP 중계
 
 ```text
 휴대폰 RoamADB
     │ TLS + 인증서 지문 고정 + 휴대폰 공개키 인증
-    │ Tailscale 사설 경로
+    │ 공식 Tailscale 사설 경로
     ▼
-PC Tailscale 단일 IPv4:47156  ← Gateway 인증 포트
-    │
-    └─ 127.0.0.1:47157       ← 인증된 휴대폰이 게시한 동안만 ADB connect
+PC의 정확한 Tailscale IPv4:47156
+    ├─ 127.0.0.1:47157  ADB connect 중계
+    └─ 127.0.0.1:47158  최초 pairing 중계
 ```
 
-- `--tailnet`은 Windows Program Files에 설치된 공식 Tailscale CLI의 `tailscale ip -4` 결과 한 개를 읽고 그 주소에만 수신한다. Gateway 옆의 동명 실행파일이나 shell 경로는 사용하지 않는다.
-- `0.0.0.0`, `::`, 일반 LAN 주소, 공인 주소는 tailnet 모드 보안 검사에서 거부한다.
-- 기본 모드는 계속 `127.0.0.1` 전용이다.
-- 공유기 포트포워딩·DMZ가 필요 없다.
-- Windows 방화벽은 자동 변경하지 않는다. 다른 tailnet 장치에서 연결이 막히면 사용자 승인 아래 실행 파일·포트 최소 규칙을 별도로 검토한다.
-- Tailscale 경로만 믿지 않고 Gateway 인증서 지문, 등록 휴대폰 키, Android 기본 ADB 승인을 함께 사용한다.
+두 ADB 포트는 인증된 휴대폰이 중계를 게시한 동안만 PC loopback에 열린다. 공유기 포트포워딩·DMZ는 필요 없고 Windows 방화벽은 자동 변경하지 않는다.
 
-Tailscale 공식 CLI는 `tailscale ip -4`로 현재 장치의 tailnet IPv4를 반환한다. Tailscale 장치 주소는 안정적으로 유지되며 MagicDNS 이름도 사용할 수 있다. 앱 분할 터널링에서 RoamADB를 제외하면 tailnet 경로를 우회할 수 있으므로 제외하지 않아야 한다.
+## 2. PC와 휴대폰 등록
 
-공식 근거:
+1. PC Tailscale을 연결한다.
+2. Windows에서 **RoamADB Gateway**를 연다. 콘솔이 아니라 상태 창이 계속 보여야 한다.
+3. **Gateway 켜기**를 누른다.
+4. 화면에 `100.64.0.0/10` 범위의 PC 주소가 표시되는지 확인한다.
+5. **새 등록 코드와 QR 만들기**를 누른다.
+6. 휴대폰 Tailscale을 연결한 뒤 RoamADB를 연다.
+7. 연결 방법은 **기존 VPN 경유 · ADB 전용 (권장)**을 선택한다.
+8. **PC 등록 QR 스캔**을 누른다. RoamADB 자체는 카메라 권한을 요청하지 않고 Google Play 서비스 스캐너를 그때만 연다.
+9. 스캐너를 못 쓰면 Windows 화면의 주소, 포트, 지문, 6자리 코드를 수동 입력한다.
+10. 등록이 끝나면 Windows의 코드와 QR이 폐기되고 등록된 휴대폰 탭에 기기가 나타난다.
 
-- [Tailscale CLI와 `tailscale ip`](https://tailscale.com/docs/reference/tailscale-cli)
-- [tailnet 장치 연결](https://tailscale.com/kb/1452/connect-to-devices)
-- [MagicDNS](https://tailscale.com/docs/features/magicdns)
-- [Android 앱 분할 터널링](https://tailscale.com/docs/features/client/android-app-split-tunneling)
-- [Tailscale IPv4 대역](https://tailscale.com/docs/reference/ip-pool)
+QR은 주소, 공개 인증서 지문, 일회용 코드, 만료 시각만 포함한다. 개인 키와 Tailscale 토큰은 포함하지 않는다.
 
-## 3. PC 최초 등록 실행
+## 3. 최초 1회 ADB 페어링
 
-PC Tailscale이 연결된 상태에서 다음을 실행한다.
+Android가 이 PC의 ADB 키를 아직 승인하지 않았다면 한 번 수행한다.
 
-```powershell
-.\RoamADBGateway.exe doctor
-.\RoamADBGateway.exe register --tailnet
-```
+1. 휴대폰 **개발자 옵션 → 무선 디버깅 → 페어링 코드로 기기 페어링**을 연다.
+2. 화면의 일시 페어링 포트를 RoamADB **최초 1회 무선 ADB 페어링** 카드에 입력한다.
+3. **페어링 중계 열기**를 누른다.
+4. PC Gateway의 최근 상태가 `페어링 중계 준비 ... 127.0.0.1:47158`인지 확인한다.
+5. Windows **ADB 작업** 탭에서 Android 화면의 6자리 페어링 코드를 입력하고 **ADB 페어링**을 누른다.
+6. 성공 결과를 확인한 뒤 휴대폰의 페어링 중계를 중지한다.
 
-Gateway 화면에 다음이 표시된다.
+일시 페어링 포트와 6자리 Android 페어링 코드는 저장하지 않는다. 이 단계는 RoamADB PC 등록 코드와 다른 Android 시스템 절차다.
 
-- PC의 Tailscale IPv4와 포트 `47156`
-- Gateway SHA-256 지문
-- 2분 동안 한 번만 쓸 수 있는 6자리 등록 코드
+## 4. 평상시 원격 ADB
 
-Android 앱에서 `기존 VPN 경유 · ADB 전용 (권장)`을 선택하고 위 값을 입력한다. 등록 중 휴대폰 Tailscale을 켜 둔다. 앱은 활성 Android VPN 전송을 찾지 못하면 등록·연결을 중단하고 Tailscale 연결 및 split tunneling 제외 여부를 안내한다.
+1. 휴대폰 무선 디버깅 화면의 일반 연결 포트를 RoamADB **무선 ADB 연결점** 카드에 저장한다. 페어링 포트가 아니다.
+2. PC와 휴대폰 Tailscale을 연결한다.
+3. PC Gateway를 켠다.
+4. 휴대폰 RoamADB 또는 빠른 설정 타일로 원격 디버깅을 켠다.
+5. PC Gateway 최근 상태가 `연결 중계 준비 ... 127.0.0.1:47157`인지 확인한다.
+6. Windows **ADB 작업 → ADB 연결**을 누른다.
+7. **기기 목록 새로고침**으로 `127.0.0.1:47157 device`를 확인한다.
+8. 필요하면 **scrcpy 열기**를 누른다. scrcpy가 PATH나 Gateway 옆 `scrcpy` 폴더에 있어야 한다.
+9. 끝나면 **ADB 연결 해제**, 휴대폰 RoamADB OFF, PC Gateway OFF 순으로 끈다.
 
-## 4. 평상시 사용
+## 5. 오류 확인
 
-1. PC에서 Tailscale을 연결한다.
-2. PC에서 `.\RoamADBGateway.exe run --tailnet`을 실행한다.
-3. 휴대폰에서 Tailscale을 연결한다.
-4. 휴대폰 개발자 옵션의 무선 디버깅 화면에서 현재 connect 포트를 RoamADB에 저장한다.
-5. RoamADB 앱 또는 빠른 설정 타일로 ON 한다.
-6. PC Gateway가 connect relay 준비를 표시하면 `adb connect 127.0.0.1:47157`을 실행한다.
-7. 끝나면 RoamADB를 OFF하고 Gateway를 `Ctrl+C`로 종료한다.
+- **Tailscale을 찾지 못함**: PC 공식 Tailscale 설치와 연결을 확인한다.
+- **활성 VPN 없음**: 휴대폰 Tailscale을 먼저 연결하고 split tunneling에서 RoamADB를 제외하지 않는다.
+- **등록 코드 만료**: PC에서 새 코드와 QR을 만든다.
+- **adb.exe를 찾지 못함**: Android SDK Platform-Tools를 설치한다.
+- **pair/connect 포트 연결 실패**: Android 무선 디버깅 화면을 다시 열고 현재 포트를 확인한다. Android가 포트를 바꿀 수 있다.
+- **Gateway 47156 접근 차단**: 자동 방화벽 변경은 하지 않는다. 같은 tailnet의 휴대폰 실기기 시험 후 필요한 최소 Windows 규칙만 별도로 검토한다.
 
-Gateway 자체 상태는 다른 PC 창에서 확인할 수 있다.
+## 6. 아직 필요한 현장 검증
 
-```powershell
-.\RoamADBGateway.exe status --tailnet
-```
+- Fold8 Android 17 / One UI 9의 실제 QR 스캔과 등록
+- LTE/외부 Wi-Fi에서 pairing과 `adb connect`
+- `adb shell`, `logcat`, APK 설치, 파일 왕복, Android Studio, scrcpy
+- 화면 잠금, Wi-Fi↔LTE, Tailscale 재연결, 장시간 유지
+- Android 16 / One UI 8 태블릿 호환성
 
-## 5. 아직 필요한 실기기 검증
-
-- Fold8에서 외부 Wi-Fi/LTE를 사용한 휴대폰 앱 ↔ PC Gateway 등록·인증
-- Fold8 local adbd connect 포트 연결
-- PC `adb devices`, `adb shell`, `logcat`, APK 설치, 파일 왕복
-- Android Studio·scrcpy·Codex ADB 사용
-- 화면 잠금, Tailscale 재연결, Wi-Fi↔LTE 전환, 장시간 유지
-- Windows 방화벽이 다른 tailnet 장치의 47156 연결을 허용하는지 확인
-
-현재 PC 안에서 self-contained Gateway의 정확한 tailnet 주소 수신, pinned-TLS `status --tailnet`, 미인증 상태의 ADB relay 포트 폐쇄와 종료 후 전체 포트 폐쇄는 PASS다. 실제 휴대폰이 연결되지 않아 위 항목은 `현장 검증 필요`다.
+현재 Windows GUI와 설치본, 로컬 Tailscale 주소, QR, 프로토콜 자동시험은 PASS다. 위 실기기 항목은 검증 전이므로 완료로 보지 않는다.

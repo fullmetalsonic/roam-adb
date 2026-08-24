@@ -9,6 +9,7 @@ $localDotnet = Join-Path $projectRoot '.tools\dotnet\dotnet.exe'
 $dotnet = if (Test-Path -LiteralPath $localDotnet) { $localDotnet } else { 'dotnet' }
 $testProject = Join-Path $projectRoot 'tests\gateway\RoamADB.Gateway.Tests\RoamADB.Gateway.Tests.csproj'
 $cliProject = Join-Path $projectRoot 'src\gateway\RoamADB.Gateway.Cli\RoamADB.Gateway.Cli.csproj'
+$desktopProject = Join-Path $projectRoot 'src\gateway\RoamADB.Gateway.Desktop\RoamADB.Gateway.Desktop.csproj'
 
 & $dotnet build $testProject -c Release
 if ($LASTEXITCODE -ne 0) {
@@ -28,4 +29,9 @@ if ($LASTEXITCODE -ne 0) {
 & $dotnet run --project $cliProject -c Release --no-build -- doctor
 if ($LASTEXITCODE -ne 0) {
     throw "Gateway doctor failed with exit code $LASTEXITCODE."
+}
+
+& $dotnet build $desktopProject -c Release
+if ($LASTEXITCODE -ne 0) {
+    throw "Gateway Desktop build failed with exit code $LASTEXITCODE."
 }

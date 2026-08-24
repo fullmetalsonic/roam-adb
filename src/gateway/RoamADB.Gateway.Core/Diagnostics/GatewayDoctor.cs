@@ -76,18 +76,11 @@ public static class GatewayDoctor
 
   private static DoctorCheck CheckAdb()
   {
-    var candidates = new[]
-    {
-      Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "Android", "Sdk", "platform-tools", "adb.exe"),
-      Path.Combine(AppContext.BaseDirectory, "platform-tools", "adb.exe")
-    };
-    var found = candidates.FirstOrDefault(File.Exists);
+    var found = ToolLocator.FindAdb();
     return new DoctorCheck(
       "adb",
       found is not null,
-      found is null ? "ADB was not found in known locations." : "ADB was found in a known local location.",
+      found is null ? "ADB was not found in known locations or PATH." : $"ADB found: {found}",
       Required: false);
   }
 

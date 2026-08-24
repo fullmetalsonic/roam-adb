@@ -4,6 +4,7 @@ import io.github.fullmetalsonic.roamadb.model.ConnectionState
 import io.github.fullmetalsonic.roamadb.model.ConnectionMode
 import io.github.fullmetalsonic.roamadb.model.GatewayProfile
 import io.github.fullmetalsonic.roamadb.model.LocalAdbEndpoint
+import io.github.fullmetalsonic.roamadb.model.PairingRelayState
 import io.github.fullmetalsonic.roamadb.security.GatewayProfileStore
 import io.github.fullmetalsonic.roamadb.security.LocalAdbEndpointStore
 import io.github.fullmetalsonic.roamadb.tunnel.GatewayProtocolClient
@@ -31,9 +32,13 @@ class ConnectionController(
     )
     private var connectionJob: Job? = null
     private var session: GatewaySession? = null
+    private val mutablePairingState = MutableStateFlow<PairingRelayState>(PairingRelayState.Off)
+    private var pairingJob: Job? = null
+    private var pairingSession: GatewaySession? = null
     private var operationId: Long = 0
 
     val state: StateFlow<ConnectionState> = mutableState.asStateFlow()
+    val pairingState: StateFlow<PairingRelayState> = mutablePairingState.asStateFlow()
 
     suspend fun register(profile: GatewayProfile, registrationCode: String) {
         check(!state.value.isRunning) { "Stop the active connection before registration." }
@@ -54,6 +59,13 @@ class ConnectionController(
 
     fun start() {
         if (connectionJob?.isActive == true) return
+        if (pairingJob?.isActive == true) {
+            mutableState.value = ConnectionState.Error(
+                code = "pairing_relay_active",
+                detail = "Stop the temporary pairing relay before starting the normal ADB relay.",
+            )
+            return
+        }
         val profile = profileStore.load()
         if (profile == null) {
             mutableState.value = ConnectionState.SetupRequired
@@ -139,8 +151,60 @@ class ConnectionController(
         }
     }
 
+    fun startPairing(localPairingPort: Int) {
+        require(localPairingPort in 1..65_535) { "Wireless ADB pairing port is invalid." }
+        check(!state.value.isRunning) { "Stop the normal ADB relay before starting pairing." }
+        if (pairingJob?.isActive == true) return
+        val profile = profileStore.load()
+        if (profile == null) {
+            mutablePairingState.value = PairingRelayState.Error("Register the PC first.")
+            return
+        }
+
+        mutablePairingState.value = PairingRelayState.Starting
+        pairingJob = scope.launch {
+            var openedSession: GatewaySession? = null
+            try {
+                validateConnectionMode(profile)
+                openedSession = protocolClient.authenticate(profile)
+                pairingSession = openedSession
+                val relay = openedSession.publishRelay(GatewaySession.RELAY_PAIRING)
+                mutablePairingState.value = PairingRelayState.Ready(relay.gatewayLoopbackPort)
+                openedSession.awaitAndRunRelay(
+                    publishedRelay = relay,
+                    localAdbPort = localPairingPort,
+                ) {
+                    mutablePairingState.value = PairingRelayState.PcConnected
+                }
+                mutablePairingState.value = PairingRelayState.Off
+            } catch (throwable: CancellationException) {
+                mutablePairingState.value = PairingRelayState.Off
+                throw throwable
+            } catch (throwable: Throwable) {
+                mutablePairingState.value = PairingRelayState.Error(
+                    throwable.message ?: throwable::class.java.simpleName,
+                )
+            } finally {
+                if (pairingSession === openedSession) {
+                    pairingSession = null
+                }
+                openedSession?.close()
+                pairingJob = null
+            }
+        }
+    }
+
+    fun stopPairing() {
+        pairingJob?.cancel()
+        pairingJob = null
+        pairingSession?.close()
+        pairingSession = null
+        mutablePairingState.value = PairingRelayState.Off
+    }
+
     fun clearRegistration() {
         stop()
+        stopPairing()
         profileStore.clear()
         localAdbEndpointStore.clear()
         mutableState.value = ConnectionState.SetupRequired

@@ -5,10 +5,10 @@ plugins {
 
 android {
     namespace = "io.github.fullmetalsonic.roamadb.runtime"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
-        minSdk = 35
+        minSdk = 36
     }
 
     compileOptions {

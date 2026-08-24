@@ -5,6 +5,7 @@ using System.Security.Cryptography;
 using RoamADB.Gateway.Client;
 using RoamADB.Gateway.Configuration;
 using RoamADB.Gateway.Protocol;
+using RoamADB.Gateway.Registration;
 using RoamADB.Gateway.Security;
 using RoamADB.Gateway.Server;
 
@@ -12,6 +13,7 @@ var tests = new (string Name, Func<Task> Run)[]
 {
   ("registration code is one-time", RegistrationCodeIsOneTimeAsync),
   ("registration rejects reuse", RegistrationRejectsReuseAsync),
+  ("registration QR uses bounded safe fields", RegistrationQrUsesBoundedSafeFieldsAsync),
   ("non-loopback listener is rejected", NonLoopbackListenerIsRejectedAsync),
   ("tailnet listener accepts exact reserved address", TailnetListenerAcceptsReservedAddressAsync),
   ("tailnet listener rejects public and wildcard addresses", TailnetListenerRejectsUnsafeAddressesAsync),
@@ -59,6 +61,29 @@ static Task RegistrationRejectsReuseAsync()
   Assert.False(manager.TryConsume("999999"), "An invalid code was accepted.");
   Assert.False(manager.TryConsume("888888"), "A second invalid code was accepted.");
   Assert.False(manager.TryConsume(ticket.Code), "A code survived the maximum failed attempts.");
+  return Task.CompletedTask;
+}
+
+static Task RegistrationQrUsesBoundedSafeFieldsAsync()
+{
+  var ticket = new RegistrationTicket("123456", DateTimeOffset.FromUnixTimeSeconds(2_000));
+  var payload = new RegistrationPayload(
+    IPAddress.Parse("100.95.12.3"),
+    GatewayOptions.DefaultPort,
+    new string('A', 64),
+    ticket);
+  var uri = payload.ToUri();
+  Assert.True(uri.StartsWith("roamadb://register?", StringComparison.Ordinal), "Unexpected QR URI scheme.");
+  Assert.True(uri.Contains("host=100.95.12.3", StringComparison.Ordinal), "QR URI lost the Gateway host.");
+  Assert.True(uri.Contains("code=123456", StringComparison.Ordinal), "QR URI lost the one-time code.");
+  Assert.False(uri.Contains("private", StringComparison.OrdinalIgnoreCase), "QR URI exposed a private-key field.");
+  Assert.Throws<InvalidOperationException>(
+    () => new RegistrationPayload(
+      IPAddress.Parse("100.95.12.3"),
+      GatewayOptions.DefaultPort,
+      "not-a-fingerprint",
+      ticket).ToUri(),
+    "An invalid fingerprint was encoded into the QR URI.");
   return Task.CompletedTask;
 }
 

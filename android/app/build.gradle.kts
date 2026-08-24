@@ -6,14 +6,14 @@ plugins {
 
 android {
     namespace = "io.github.fullmetalsonic.roamadb"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "io.github.fullmetalsonic.roamadb"
-        minSdk = 35
-        targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0-spike"
+        minSdk = 36
+        targetSdk = 36
+        versionCode = 2
+        versionName = "0.1.1-spike"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -65,5 +65,6 @@ dependencies {
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
+    implementation("com.google.android.gms:play-services-code-scanner:16.1.0")
     debugImplementation("androidx.compose.ui:ui-tooling")
 }
