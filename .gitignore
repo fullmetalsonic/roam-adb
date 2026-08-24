@@ -1,0 +1,31 @@
+# Local toolchains and IDE state
+.tools/
+.idea/
+.vs/
+.vscode/
+
+# Android local state and build outputs
+android/local.properties
+android/.gradle/
+android/.kotlin/
+android/**/build/
+*.apk
+*.aab
+
+# .NET outputs
+**/bin/
+**/obj/
+TestResults/
+artifacts/
+
+# Runtime state, secrets, and diagnostics
+.runtime/
+*.pfx
+*.key
+*.pem
+*.log
+diagnostic-report-*.json
+
+# OS files
+Thumbs.db
+.DS_Store

@@ -1,0 +1,6 @@
+RoamADB
+Copyright 2026 fullmetalsonic and RoamADB contributors
+
+This technical spike currently contains original RoamADB source plus package
+dependencies resolved by Gradle and the .NET SDK. Tailscale, LADB, AOSP adb,
+and scrcpy source code is not included in the repository at this stage.
