@@ -2,6 +2,8 @@
 
 RoamADB connects an Android phone away from home to the owner's Windows PC for on-demand remote ADB. The current recommended path uses the official Tailscale apps as the private network; RoamADB adds its own PC identity, phone registration, and local-only ADB relay.
 
+The published `v0.1.2-spike` still uses Android Wireless debugging. A separate **portable USB ADB bridge** is now planned for LTE/5G travel where the phone should not depend on external Wi-Fi. That hardware path is documented but not implemented or included in the current APK/EXE.
+
 ## What is included
 
 - **RoamADB for Android**: QR/manual PC registration, first-time Wireless ADB pairing relay, normal ADB relay, foreground notification, and Quick Settings tile.
@@ -33,6 +35,19 @@ The Windows files are not code-signed and the APK is debug-signed, so Windows Sm
 
 Later sessions need only Tailscale on both devices, Gateway on the PC, RoamADB ON on the phone, and **ADB 연결** on the PC. See the detailed Korean guide: [`docs/기존_Tailscale_ADB_전용_모드.md`](docs/기존_Tailscale_ADB_전용_모드.md).
 
+## Portable USB bridge plan
+
+The planned `portable-usb-bridge` mode uses a small Linux ADB host, initially a Raspberry Pi Zero 2 W:
+
+```text
+Fold8 USB adbd ── USB ── portable bridge adb
+Fold8 LTE/5G ── phone hotspot ── bridge Tailscale ── home PC
+```
+
+This path is intended to keep Android Wireless debugging off and avoid phone root, public ADB ports, router port forwarding, and dependence on public Wi-Fi. The bridge is a separate Tailscale node and needs its own power source. Initial remote commands will use Tailscale-restricted SSH; a product Bridge Agent is gated on physical-device results.
+
+Current status: hardware procurement/delivery pending, implementation and device E2E **NOT RUN**. See the detailed Korean plan: [`docs/휴대형_USB_ADB_브리지_기획서.md`](docs/휴대형_USB_ADB_브리지_기획서.md).
+
 ## Verification status
 
 - Gateway .NET build and 15 unit/integration tests: PASS.
@@ -41,6 +56,7 @@ Later sessions need only Tailscale on both devices, Gateway on the PC, RoamADB O
 - Actual local Tailscale address, registration countdown, and QR rendering in the Windows GUI: PASS.
 - Fold8 Android 17 / One UI 9 QR registration, phone authentication, Tailscale relay, USB-free ADB shell, and file round trip: PASS.
 - LTE/5G-only operation, another external Wi-Fi, screen lock, long-duration recovery, and Android 16 / One UI 8: **field validation required**.
+- Portable USB bridge power, hotspot, USB ADB, Tailscale, and remote PC E2E: **hardware required / not run**.
 
 Android may change the Wireless debugging connect port after Wi-Fi or debugging-state changes. In this spike, reopen Wireless debugging and save the new normal connect port in RoamADB before turning the relay on. Automatic mDNS port refresh remains a follow-up item.
 

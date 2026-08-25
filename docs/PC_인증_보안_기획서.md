@@ -2,8 +2,8 @@
 
 ## 1. 문서 상태
 
-- 상태: 1차 등록·ECDSA 인증 구현, ADB relay 인증 목표안
-- 실제 인증 구현: 자동 통합시험 PASS, 실기기·침투시험 미실시
+- 상태: v0.1.2 등록·ECDSA·ADB relay 실기기 통과 + 휴대형 USB 브리지 보안 목표안
+- 실제 인증 구현: 자동 통합시험과 Fold8 USB 없는 E2E PASS, 침투시험·휴대형 브리지 E2E 미실시
 - GitHub 소유자: `fullmetalsonic`
 - Windows 프로그램: `RoamADB Gateway`
 
@@ -26,6 +26,14 @@
 | 3. Android 기본 ADB 인증 | Android 무선 페어링·TLS 또는 ADB RSA 키 | relay를 통과했지만 Android ADB 승인이 없는 PC |
 
 세 계층 중 하나라도 실패하면 ADB 세션을 열지 않는다.
+
+휴대형 USB 브리지는 같은 원칙을 다음처럼 적용한다.
+
+| 계층 | 담당 | 차단 대상 |
+|---|---|---|
+| 1. 사설망 장치 인증 | 브리지와 집 PC의 Tailscale node | 인터넷·tailnet 밖 장치 |
+| 2. 브리지 관리 인증 | SSH 공개키 또는 후속 RoamADB Bridge Agent 등록 | 같은 tailnet의 미허용 장치 |
+| 3. Android 기본 ADB 인증 | Fold8의 USB ADB RSA 승인 | 브리지를 확보했지만 폰 승인이 없는 host |
 
 ## 4. PC에 설치할 항목
 
@@ -171,6 +179,9 @@ PC가 꺼져 있으면 휴대폰은 `READY`, PC가 연결되면 `PC_CONNECTED`�
 | QR 사진 재사용 | 2분 만료·1회 사용·신원 일치 검사 |
 | 허용 PC 탈취 | 휴대폰 허용 삭제 + tailnet 장치 제거 + ADB 승인 취소 |
 | 앱 OFF 후 재접속 | relay·VPN·세션 종료로 거부 |
+| 브리지 `5037` 핫스팟 스캔 | loopback bind와 socket 검사로 접근 불가 |
+| 브리지 microSD·기기 분실 | tailnet node 제거 + SSH 키 폐기 + Fold8 ADB 승인 취소 |
+| 충전 전용 케이블을 데이터 케이블로 오인 | USB 미검출로 분리 진단, 네트워크 복구로 오판하지 않음 |
 
 ## 13. 기술 스파이크 검증 항목
 
@@ -185,9 +196,25 @@ PC가 꺼져 있으면 휴대폰은 `READY`, PC가 연결되면 `PC_CONNECTED`�
 - 공식 Tailscale 선연결 → RoamADB 등록·ON
 - Tailscale OFF·split tunneling 제외 상태의 실패 안내
 
-## 14. 남은 사용자 선택
+## 14. 휴대형 USB 브리지 보안 경계
+
+`portable-usb-bridge`의 상세 구조와 하드웨어 절차는 `휴대형_USB_ADB_브리지_기획서.md`를 따른다.
+
+- Fold8 무선 디버깅은 OFF로 유지하고 USB `adbd`만 사용한다.
+- 브리지는 Fold8 핫스팟을 인터넷 uplink로만 사용하고 별도 Tailscale node로 등록한다.
+- 초기 원격 관리는 Tailscale로 제한된 SSH 공개키 인증을 사용한다.
+- 브리지 ADB server는 loopback에만 두고 `adb -a`, 공인 `5037`, `adb tcpip 5555`를 금지한다.
+- hotspot SSID·비밀번호, Tailscale state, SSH private key와 ADB private key를 Git·진단 보고서·QR에 넣지 않는다.
+- microSD 재작성 시 ADB host key가 바뀐다는 점을 안내하고 Fold8에서 다시 승인한다.
+- 브리지 분실 시 Tailscale node 제거, SSH·Agent 등록 회수와 Fold8 USB 디버깅 승인 취소를 함께 수행한다.
+- Bridge Agent는 전원·USB·네트워크 Gate 통과 전 구현하지 않는다.
+
+출시 전에는 브리지의 모든 listening socket을 수집해 loopback 또는 승인한 Tailscale 단일 주소 이외 bind가 0건인지 확인한다. 핫스팟의 다른 클라이언트, 미허용 tailnet node와 Tailscale 밖 장치에서 접근 실패를 실제로 확인한다.
+
+## 15. 남은 사용자 선택
 
 - QR 스캔을 위해 카메라 권한을 허용할지, 6자리 코드만 사용할지
 - PC 등록 요청을 휴대폰에서 시작할지 PC에서 시작할지
 - Tailscale Device Approval을 기본 안내에 포함할지
 - 집 PC 외 추가 PC를 여러 대 허용할지
+- 브리지 관리를 Tailscale SSH로 유지할지 RoamADB Bridge Agent로 전환할지
