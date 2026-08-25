@@ -7,9 +7,9 @@ $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $releaseOutput = Join-Path $projectRoot 'artifacts\release'
 $assets = @(
-    'RoamADB-Gateway-Setup-0.1.1-spike.exe',
-    'RoamADB-Gateway-Portable-0.1.1-spike.exe',
-    'RoamADB-0.1.1-spike-debug.apk'
+    'RoamADB-Gateway-Setup-0.1.2-spike.exe',
+    'RoamADB-Gateway-Portable-0.1.2-spike.exe',
+    'RoamADB-0.1.2-spike-debug.apk'
 )
 
 $lines = foreach ($name in $assets) {

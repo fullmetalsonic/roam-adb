@@ -93,7 +93,10 @@ public sealed class GatewayProbeClient(string host, int port, string expectedFin
       }
 
       var nonce = Convert.FromBase64String(challenge.Nonce);
-      var signature = privateKey.SignData(nonce, HashAlgorithmName.SHA256);
+      var signature = privateKey.SignData(
+        nonce,
+        HashAlgorithmName.SHA256,
+        DSASignatureFormat.Rfc3279DerSequence);
       await ProtocolCodec.WriteAsync(
         connection,
         new WireMessage

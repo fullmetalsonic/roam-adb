@@ -25,7 +25,11 @@ public static class DeviceSignatureVerifier
       key.ImportSubjectPublicKeyInfo(publicKey, out var consumed);
       return consumed == publicKey.Length
         && key.KeySize == 256
-        && key.VerifyData(challenge, signature, HashAlgorithmName.SHA256);
+        && key.VerifyData(
+          challenge,
+          signature,
+          HashAlgorithmName.SHA256,
+          DSASignatureFormat.Rfc3279DerSequence);
     }
     catch (FormatException)
     {

@@ -21,6 +21,8 @@ public sealed class GatewayServer(
   private readonly TcpListener _listener = new(options.ListenAddress, options.Port);
   private readonly ConcurrentDictionary<long, Task> _clientTasks = new();
   private readonly SemaphoreSlim _clientSlots = new(options.MaxConcurrentClients, options.MaxConcurrentClients);
+  private readonly SemaphoreSlim _connectRelaySlot = new(1, 1);
+  private readonly SemaphoreSlim _pairingRelaySlot = new(1, 1);
   private readonly CancellationTokenSource _stop = new();
   private long _clientSequence;
   private bool _started;
@@ -91,6 +93,8 @@ public sealed class GatewayServer(
     _listener.Stop();
     certificate.Dispose();
     _clientSlots.Dispose();
+    _connectRelaySlot.Dispose();
+    _pairingRelaySlot.Dispose();
     _stop.Dispose();
   }
 
@@ -113,7 +117,7 @@ public sealed class GatewayServer(
           },
           timeout.Token).ConfigureAwait(false);
 
-        await ProcessProtocolAsync(ssl, timeout.Token, cancellationToken).ConfigureAwait(false);
+        await ProcessProtocolAsync(client, ssl, timeout.Token, cancellationToken).ConfigureAwait(false);
       }
       catch (OperationCanceledException) when (timeout.IsCancellationRequested || cancellationToken.IsCancellationRequested)
       {
@@ -148,6 +152,7 @@ public sealed class GatewayServer(
   }
 
   private async Task ProcessProtocolAsync(
+    TcpClient phoneClient,
     SslStream ssl,
     CancellationToken authenticationCancellationToken,
     CancellationToken sessionCancellationToken)
@@ -184,6 +189,7 @@ public sealed class GatewayServer(
 
       case "hello":
         await AuthenticateAsync(
+          phoneClient,
           ssl,
           request,
           authenticationCancellationToken,
@@ -240,6 +246,7 @@ public sealed class GatewayServer(
   }
 
   private async Task AuthenticateAsync(
+    TcpClient phoneClient,
     SslStream ssl,
     WireMessage hello,
     CancellationToken authenticationCancellationToken,
@@ -312,7 +319,12 @@ public sealed class GatewayServer(
       }
       else if (message.Type == "publish_relay")
       {
-        await RunRelayAsync(ssl, device.DeviceId, message, sessionCancellationToken).ConfigureAwait(false);
+        await RunRelayAsync(
+          phoneClient,
+          ssl,
+          device.DeviceId,
+          message,
+          sessionCancellationToken).ConfigureAwait(false);
         return;
       }
       else
@@ -324,82 +336,141 @@ public sealed class GatewayServer(
   }
 
   private async Task RunRelayAsync(
+    TcpClient phoneClient,
     SslStream phoneStream,
     string deviceId,
     WireMessage request,
     CancellationToken cancellationToken)
   {
-    var configuredPort = request.RelayKind switch
+    var relayConfiguration = request.RelayKind switch
     {
-      "connect" => options.AdbConnectRelayPort,
-      "pairing" => options.AdbPairingRelayPort,
-      _ => -1
+      "connect" => (Port: options.AdbConnectRelayPort, Slot: _connectRelaySlot),
+      "pairing" => (Port: options.AdbPairingRelayPort, Slot: _pairingRelaySlot),
+      _ => (Port: -1, Slot: (SemaphoreSlim?)null)
     };
 
-    if (configuredPort < 0)
+    if (relayConfiguration.Port < 0 || relayConfiguration.Slot is null)
     {
       await RejectAsync(phoneStream, "invalid_relay_kind", cancellationToken).ConfigureAwait(false);
       return;
     }
 
-    var listener = new TcpListener(IPAddress.Loopback, configuredPort);
+    await relayConfiguration.Slot.WaitAsync(cancellationToken).ConfigureAwait(false);
     try
     {
-      listener.Start(1);
-    }
-    catch (SocketException)
-    {
-      await RejectAsync(phoneStream, "relay_port_unavailable", cancellationToken).ConfigureAwait(false);
-      return;
-    }
-
-    try
-    {
-      var boundPort = ((IPEndPoint)listener.LocalEndpoint).Port;
-      await ProtocolCodec.WriteAsync(
-        phoneStream,
-        new WireMessage
-        {
-          Type = "relay_published",
-          Success = true,
-          DeviceId = deviceId,
-          RelayKind = request.RelayKind,
-          RelayPort = boundPort
-        },
-        cancellationToken).ConfigureAwait(false);
-      RelayPublished?.Invoke(new RelayPublishedEvent(deviceId, request.RelayKind!, boundPort));
-
-      using var localAdbClient = await listener.AcceptTcpClientAsync(cancellationToken).ConfigureAwait(false);
-      listener.Stop();
-
-      await ProtocolCodec.WriteAsync(
-        phoneStream,
-        new WireMessage
-        {
-          Type = "relay_start",
-          Success = true,
-          RelayKind = request.RelayKind,
-          RelayPort = boundPort
-        },
-        cancellationToken).ConfigureAwait(false);
-
-      using var relayStartTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-      relayStartTimeout.CancelAfter(options.AuthenticationTimeout);
-      var ready = await ProtocolCodec.ReadAsync(phoneStream, relayStartTimeout.Token).ConfigureAwait(false);
-      if (ready is null || ready.Type != "relay_ready" || ready.RelayKind != request.RelayKind)
+      var listener = new TcpListener(IPAddress.Loopback, relayConfiguration.Port);
+      try
       {
+        listener.Start(1);
+      }
+      catch (SocketException)
+      {
+        await RejectAsync(phoneStream, "relay_port_unavailable", cancellationToken).ConfigureAwait(false);
         return;
       }
 
-      await RelayStreamPump.RunAsync(
-        phoneStream,
-        localAdbClient.GetStream(),
-        cancellationToken).ConfigureAwait(false);
+      try
+      {
+        var boundPort = ((IPEndPoint)listener.LocalEndpoint).Port;
+        await ProtocolCodec.WriteAsync(
+          phoneStream,
+          new WireMessage
+          {
+            Type = "relay_published",
+            Success = true,
+            DeviceId = deviceId,
+            RelayKind = request.RelayKind,
+            RelayPort = boundPort
+          },
+          cancellationToken).ConfigureAwait(false);
+        RelayPublished?.Invoke(new RelayPublishedEvent(deviceId, request.RelayKind!, boundPort));
+
+        using var localAdbClient = await WaitForLocalAdbClientAsync(
+          listener,
+          phoneClient,
+          phoneStream,
+          cancellationToken).ConfigureAwait(false);
+        if (localAdbClient is null)
+        {
+          return;
+        }
+        listener.Stop();
+
+        await ProtocolCodec.WriteAsync(
+          phoneStream,
+          new WireMessage
+          {
+            Type = "relay_start",
+            Success = true,
+            RelayKind = request.RelayKind,
+            RelayPort = boundPort
+          },
+          cancellationToken).ConfigureAwait(false);
+
+        using var relayStartTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        relayStartTimeout.CancelAfter(options.AuthenticationTimeout);
+        var ready = await ProtocolCodec.ReadAsync(phoneStream, relayStartTimeout.Token).ConfigureAwait(false);
+        if (ready is null || ready.Type != "relay_ready" || ready.RelayKind != request.RelayKind)
+        {
+          return;
+        }
+
+        await RelayStreamPump.RunAsync(
+          phoneStream,
+          localAdbClient.GetStream(),
+          cancellationToken).ConfigureAwait(false);
+      }
+      finally
+      {
+        listener.Stop();
+      }
     }
     finally
     {
-      listener.Stop();
+      relayConfiguration.Slot.Release();
     }
+  }
+
+  private static async Task<TcpClient?> WaitForLocalAdbClientAsync(
+    TcpListener listener,
+    TcpClient phoneClient,
+    Stream phoneStream,
+    CancellationToken cancellationToken)
+  {
+    while (!cancellationToken.IsCancellationRequested)
+    {
+      if (listener.Pending())
+      {
+        return await listener.AcceptTcpClientAsync(cancellationToken).ConfigureAwait(false);
+      }
+
+      if (phoneClient.Client.Poll(0, SelectMode.SelectRead))
+      {
+        var control = await ProtocolCodec.ReadAsync(phoneStream, cancellationToken).ConfigureAwait(false);
+        if (control is null || control.Type == "close")
+        {
+          return null;
+        }
+
+        if (control.Type == "ping")
+        {
+          await ProtocolCodec.WriteAsync(
+            phoneStream,
+            new WireMessage { Type = "pong", Success = true },
+            cancellationToken).ConfigureAwait(false);
+        }
+        else
+        {
+          await RejectAsync(phoneStream, "unsupported_relay_wait_message", cancellationToken)
+            .ConfigureAwait(false);
+          return null;
+        }
+      }
+
+      await Task.Delay(TimeSpan.FromMilliseconds(100), cancellationToken).ConfigureAwait(false);
+    }
+
+    return null;
   }
 
   private static bool IsValidDeviceId(string? deviceId) =>

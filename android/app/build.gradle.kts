@@ -12,8 +12,8 @@ android {
         applicationId = "io.github.fullmetalsonic.roamadb"
         minSdk = 36
         targetSdk = 36
-        versionCode = 2
-        versionName = "0.1.1-spike"
+        versionCode = 3
+        versionName = "0.1.2-spike"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

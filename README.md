@@ -12,11 +12,11 @@ The program does not change router port forwarding, Windows Firewall, DMZ, Tails
 
 ## Download
 
-The [`v0.1.1-spike` prerelease](https://github.com/fullmetalsonic/roam-adb/releases/tag/v0.1.1-spike) contains:
+The [`v0.1.2-spike` prerelease](https://github.com/fullmetalsonic/roam-adb/releases/tag/v0.1.2-spike) contains:
 
-- `RoamADB-Gateway-Setup-0.1.1-spike.exe` — recommended per-user Windows installer;
-- `RoamADB-Gateway-Portable-0.1.1-spike.exe` — no-install Windows x64 program;
-- `RoamADB-0.1.1-spike-debug.apk` — Android 16 / API 36 or newer;
+- `RoamADB-Gateway-Setup-0.1.2-spike.exe` — recommended per-user Windows installer;
+- `RoamADB-Gateway-Portable-0.1.2-spike.exe` — no-install Windows x64 program;
+- `RoamADB-0.1.2-spike-debug.apk` — Android 16 / API 36 or newer;
 - `SHA256SUMS.txt` — download integrity values.
 
 The Windows files are not code-signed and the APK is debug-signed, so Windows SmartScreen and Android sideload warnings are expected. This is a GitHub technical prerelease, not a Play Store release.
@@ -35,11 +35,14 @@ Later sessions need only Tailscale on both devices, Gateway on the PC, RoamADB O
 
 ## Verification status
 
-- Gateway .NET build and 14 unit/integration tests: PASS.
+- Gateway .NET build and 15 unit/integration tests: PASS.
 - Android unit tests, debug APK build, and lint: PASS.
 - Actual Windows installer → installed GUI launch → normal close → uninstall: PASS.
 - Actual local Tailscale address, registration countdown, and QR rendering in the Windows GUI: PASS.
-- Fold8 Android 17 / One UI 9 external-network ADB end-to-end test: **field validation required**.
+- Fold8 Android 17 / One UI 9 QR registration, phone authentication, Tailscale relay, USB-free ADB shell, and file round trip: PASS.
+- LTE/5G-only operation, another external Wi-Fi, screen lock, long-duration recovery, and Android 16 / One UI 8: **field validation required**.
+
+Android may change the Wireless debugging connect port after Wi-Fi or debugging-state changes. In this spike, reopen Wireless debugging and save the new normal connect port in RoamADB before turning the relay on. Automatic mDNS port refresh remains a follow-up item.
 
 Do not expose ADB port 5555, forward the loopback relay ports, or place the PC in router DMZ.
 

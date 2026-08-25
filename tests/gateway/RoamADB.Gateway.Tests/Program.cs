@@ -24,7 +24,8 @@ var tests = new (string Name, Func<Task> Run)[]
   ("register and authenticate integration", RegisterAndAuthenticateIntegrationAsync),
   ("authenticated session outlives login deadline", AuthenticatedSessionOutlivesLoginDeadlineAsync),
   ("authenticated relay forwards binary traffic", AuthenticatedRelayForwardsBinaryTrafficAsync),
-  ("relay start deadline closes stalled local client", RelayStartDeadlineClosesStalledLocalClientAsync)
+  ("relay start deadline closes stalled local client", RelayStartDeadlineClosesStalledLocalClientAsync),
+  ("phone close releases unpublished relay port", PhoneCloseReleasesUnpublishedRelayPortAsync)
 };
 
 var failures = 0;
@@ -149,7 +150,11 @@ static Task SignatureVerifierAcceptsMatchingKeyAsync()
 {
   using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
   var challenge = RandomNumberGenerator.GetBytes(32);
-  var signature = key.SignData(challenge, HashAlgorithmName.SHA256);
+  var signature = key.SignData(
+    challenge,
+    HashAlgorithmName.SHA256,
+    DSASignatureFormat.Rfc3279DerSequence);
+  Assert.True(signature.Length > 0 && signature[0] == 0x30, "The regression signature is not DER encoded.");
   var publicKey = Convert.ToBase64String(key.ExportSubjectPublicKeyInfo());
   Assert.True(
     DeviceSignatureVerifier.Verify(publicKey, challenge, Convert.ToBase64String(signature)),
@@ -162,7 +167,10 @@ static Task SignatureVerifierRejectsAnotherKeyAsync()
   using var enrolledKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
   using var attackerKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
   var challenge = RandomNumberGenerator.GetBytes(32);
-  var signature = attackerKey.SignData(challenge, HashAlgorithmName.SHA256);
+  var signature = attackerKey.SignData(
+    challenge,
+    HashAlgorithmName.SHA256,
+    DSASignatureFormat.Rfc3279DerSequence);
   var publicKey = Convert.ToBase64String(enrolledKey.ExportSubjectPublicKeyInfo());
   Assert.False(
     DeviceSignatureVerifier.Verify(publicKey, challenge, Convert.ToBase64String(signature)),
@@ -356,6 +364,62 @@ static async Task RelayStartDeadlineClosesStalledLocalClientAsync()
   Assert.Equal(0, read, "A phone that never returned relay_ready held the local ADB socket open.");
 }
 
+static async Task PhoneCloseReleasesUnpublishedRelayPortAsync()
+{
+  var relayPort = ReserveLoopbackPort();
+  await using var fixture = await GatewayFixture.StartAsync(adbConnectRelayPort: relayPort);
+  using var phoneKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+  var ticket = fixture.RegistrationCodes.Issue();
+  var client = new GatewayProbeClient(
+    "127.0.0.1",
+    fixture.Server.BoundPort,
+    fixture.Server.Fingerprint);
+
+  await client.RegisterAsync(
+    new RegistrationRequest(
+      "fold8-relay-republish-test",
+      "Galaxy Z Fold8 Relay Republish Test",
+      Convert.ToBase64String(phoneKey.ExportSubjectPublicKeyInfo()),
+      ticket.Code),
+    CancellationToken.None);
+
+  await using (var firstSession = await client.OpenAuthenticatedSessionAsync(
+    "fold8-relay-republish-test",
+    phoneKey,
+    CancellationToken.None))
+  {
+    var firstPublication = await firstSession.PublishRelayAsync("connect", CancellationToken.None);
+    Assert.Equal("relay_published", firstPublication.Type, "The first relay was not published.");
+    Assert.Equal(relayPort, firstPublication.RelayPort, "The first relay used an unexpected port.");
+  }
+
+  using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+  await using var secondSession = await client.OpenAuthenticatedSessionAsync(
+    "fold8-relay-republish-test",
+    phoneKey,
+    deadline.Token);
+  var secondPublication = await secondSession.PublishRelayAsync("connect", deadline.Token);
+  Assert.Equal(
+    "relay_published",
+    secondPublication.Type,
+    "The phone close left the unpublished relay listener occupied.");
+  Assert.Equal(relayPort, secondPublication.RelayPort, "The republished relay used an unexpected port.");
+}
+
+static int ReserveLoopbackPort()
+{
+  var listener = new TcpListener(IPAddress.Loopback, 0);
+  listener.Start();
+  try
+  {
+    return ((IPEndPoint)listener.LocalEndpoint).Port;
+  }
+  finally
+  {
+    listener.Stop();
+  }
+}
+
 file sealed class GatewayFixture : IAsyncDisposable
 {
   private readonly CancellationTokenSource _cancellation;
@@ -376,13 +440,15 @@ file sealed class GatewayFixture : IAsyncDisposable
   public GatewayServer Server { get; }
   public RegistrationCodeManager RegistrationCodes { get; }
 
-  public static async Task<GatewayFixture> StartAsync(TimeSpan? authenticationTimeout = null)
+  public static async Task<GatewayFixture> StartAsync(
+    TimeSpan? authenticationTimeout = null,
+    int? adbConnectRelayPort = null)
   {
     var options = new GatewayOptions
     {
       ListenAddress = IPAddress.Loopback,
       Port = 0,
-      AdbConnectRelayPort = 0,
+      AdbConnectRelayPort = adbConnectRelayPort ?? 0,
       AdbPairingRelayPort = 0,
       AuthenticationTimeout = authenticationTimeout ?? TimeSpan.FromSeconds(15)
     };

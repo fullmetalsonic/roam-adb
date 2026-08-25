@@ -225,7 +225,7 @@
         <Border Grid.Row="2" Background="White" BorderBrush="#D9DFEA" BorderThickness="0,1,0,0" Padding="20,10">
             <Grid>
                 <TextBlock x:Name="FooterStatusText" Text="준비 상태를 확인하는 중…" Foreground="#344054" />
-                <TextBlock Text="v0.1.1-spike · 시작 프로그램 자동 등록 안 함" HorizontalAlignment="Right" Foreground="#667085" />
+                <TextBlock Text="v0.1.2-spike · 시작 프로그램 자동 등록 안 함" HorizontalAlignment="Right" Foreground="#667085" />
             </Grid>
         </Border>
     </Grid>

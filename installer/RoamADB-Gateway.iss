@@ -1,5 +1,5 @@
 #define MyAppName "RoamADB Gateway"
-#define MyAppVersion "0.1.1-spike"
+#define MyAppVersion "0.1.2-spike"
 #define MyAppPublisher "fullmetalsonic"
 #define MyAppExeName "RoamADBGateway.exe"
 
@@ -18,7 +18,7 @@ DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
 OutputDir=..\artifacts\installer
-OutputBaseFilename=RoamADB-Gateway-Setup-0.1.1-spike
+OutputBaseFilename=RoamADB-Gateway-Setup-0.1.2-spike
 SetupIconFile=..\assets\roamadb-icon.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
 Compression=lzma2/max
@@ -30,10 +30,10 @@ LicenseFile=..\LICENSE
 CloseApplications=yes
 RestartApplications=no
 AppMutex=Local\RoamADB.Gateway.Desktop
-VersionInfoVersion=0.1.1.0
+VersionInfoVersion=0.1.2.0
 VersionInfoDescription=RoamADB Gateway installer
 VersionInfoProductName=RoamADB Gateway
-VersionInfoProductVersion=0.1.1.0
+VersionInfoProductVersion=0.1.2.0
 
 [Languages]
 Name: "korean"; MessagesFile: "compiler:Languages\Korean.isl"

@@ -25,7 +25,7 @@ if ($LASTEXITCODE -ne 0) {
     throw "Inno Setup failed with exit code $LASTEXITCODE."
 }
 
-$installer = Join-Path $projectRoot 'artifacts\installer\RoamADB-Gateway-Setup-0.1.1-spike.exe'
+$installer = Join-Path $projectRoot 'artifacts\installer\RoamADB-Gateway-Setup-0.1.2-spike.exe'
 $releaseOutput = Join-Path $projectRoot 'artifacts\release'
 if (-not (Test-Path -LiteralPath $installer)) {
     throw "Installer output was not created."

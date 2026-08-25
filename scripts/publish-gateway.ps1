@@ -11,17 +11,20 @@ $project = Join-Path $projectRoot 'src\gateway\RoamADB.Gateway.Desktop\RoamADB.G
 $output = Join-Path $projectRoot 'artifacts\gateway\win-x64'
 $releaseOutput = Join-Path $projectRoot 'artifacts\release'
 
-foreach ($target in @($output, $releaseOutput)) {
-    $resolvedTarget = [System.IO.Path]::GetFullPath($target)
-    $resolvedRoot = [System.IO.Path]::GetFullPath($projectRoot) + [System.IO.Path]::DirectorySeparatorChar
-    if (-not $resolvedTarget.StartsWith($resolvedRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
-        throw "Refusing to clean a publish path outside the project: $resolvedTarget"
+$resolvedOutput = [System.IO.Path]::GetFullPath($output)
+$resolvedReleaseOutput = [System.IO.Path]::GetFullPath($releaseOutput)
+$resolvedRoot = [System.IO.Path]::GetFullPath($projectRoot) + [System.IO.Path]::DirectorySeparatorChar
+foreach ($target in @($resolvedOutput, $resolvedReleaseOutput)) {
+    if (-not $target.StartsWith($resolvedRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Refusing to use a publish path outside the project: $target"
     }
-    if (Test-Path -LiteralPath $resolvedTarget) {
-        Remove-Item -LiteralPath $resolvedTarget -Recurse -Force
-    }
-    New-Item -ItemType Directory -Path $resolvedTarget -Force | Out-Null
 }
+
+if (Test-Path -LiteralPath $resolvedOutput) {
+    Remove-Item -LiteralPath $resolvedOutput -Recurse -Force
+}
+New-Item -ItemType Directory -Path $resolvedOutput -Force | Out-Null
+New-Item -ItemType Directory -Path $resolvedReleaseOutput -Force | Out-Null
 
 & $dotnet publish $project `
     -c Release `
@@ -42,7 +45,7 @@ if (-not (Test-Path -LiteralPath $executable)) {
     throw "Published Gateway executable was not created."
 }
 
-$portable = Join-Path $releaseOutput 'RoamADB-Gateway-Portable-0.1.1-spike.exe'
+$portable = Join-Path $releaseOutput 'RoamADB-Gateway-Portable-0.1.2-spike.exe'
 Copy-Item -LiteralPath $executable -Destination $portable -Force
 $item = Get-Item -LiteralPath $portable
 $hash = Get-FileHash -LiteralPath $portable -Algorithm SHA256

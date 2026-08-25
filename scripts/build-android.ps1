@@ -43,7 +43,7 @@ finally {
 $apk = Join-Path $androidRoot 'app\build\outputs\apk\debug\app-debug.apk'
 $releaseOutput = Join-Path $projectRoot 'artifacts\release'
 New-Item -ItemType Directory -Path $releaseOutput -Force | Out-Null
-$releaseApk = Join-Path $releaseOutput 'RoamADB-0.1.1-spike-debug.apk'
+$releaseApk = Join-Path $releaseOutput 'RoamADB-0.1.2-spike-debug.apk'
 Copy-Item -LiteralPath $apk -Destination $releaseApk -Force
 $hash = Get-FileHash -LiteralPath $apk -Algorithm SHA256
 Write-Output "APK: $apk"
