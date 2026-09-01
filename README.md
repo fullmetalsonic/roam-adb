@@ -2,7 +2,7 @@
 
 RoamADB connects an Android phone away from home to the owner's Windows PC for on-demand remote ADB. The current recommended path uses the official Tailscale apps as the private network; RoamADB adds its own PC identity, phone registration, and local-only ADB relay.
 
-The published `v0.1.2-spike` still uses Android Wireless debugging. A separate **portable USB ADB bridge** is now planned for LTE/5G travel where the phone should not depend on external Wi-Fi. That hardware path is documented but not implemented or included in the current APK/EXE.
+The published `v0.1.2-spike` still uses Android Wireless debugging. A separate **portable USB ADB bridge** has now passed its first Raspberry Pi Zero 2 W and Fold8 hardware E2E for LTE/5G travel. The hardware path is not yet integrated into the current APK/EXE or published as a new Release.
 
 ## What is included
 
@@ -40,13 +40,14 @@ Later sessions need only Tailscale on both devices, Gateway on the PC, RoamADB O
 The planned `portable-usb-bridge` mode uses a small Linux ADB host, initially a Raspberry Pi Zero 2 W:
 
 ```text
-Fold8 USB adbd ── USB ── portable bridge adb
-Fold8 LTE/5G ── phone hotspot ── bridge Tailscale ── home PC
+Fold8 USB adbd ───────────────┐
+Fold8 USB tethering ──────────┼─ USB ── portable bridge adb/Tailscale ── home PC
+Fold8 2.4 GHz hotspot(fallback)┘
 ```
 
-This path is intended to keep Android Wireless debugging off and avoid phone root, public ADB ports, router port forwarding, and dependence on public Wi-Fi. The bridge is a separate Tailscale node and needs its own power source. Initial remote commands will use Tailscale-restricted SSH; a product Bridge Agent is gated on physical-device results.
+This path keeps Android Wireless debugging off and avoids phone root, public ADB ports, router port forwarding, and dependence on public Wi-Fi. The same phone-to-Pi USB link carries both wired ADB and USB tethering; a saved 2.4 GHz phone hotspot remains the fallback uplink. The bridge is a separate Tailscale node and needs its own power source. The Zero 2 W uses the supported `dwc2` fixed-host configuration so a phone connected before bridge power-on is enumerated during cold boot. Initial remote commands use Tailscale-restricted SSH.
 
-Current status: hardware procurement/delivery pending, implementation and device E2E **NOT RUN**. See the detailed Korean plan: [`docs/휴대형_USB_ADB_브리지_기획서.md`](docs/휴대형_USB_ADB_브리지_기획서.md).
+Current status: initial Fold8 USB ADB, event-driven automatic USB tethering, hotspot fallback, Tailscale-address SSH, cable-preconnected cold boot, physical cable reconnect, and shell/file round trip **PASS**. A hotspot-OFF test also passed with the PC on independent home Internet and the Pi using only the phone's cellular USB tethering. Phone-only power **FAILED**, so a separate Pi power source is mandatory. The Pi configuration now has a timestamped backup, a restore script, a narrow safe-poweroff command, public-key-only SSH, a pre-SSH firewall, and no broad passwordless sudo. The first hardening pass also exposed a locked-account maintenance failure; it is recorded as open, with a one-shot SD recovery prepared but not yet physically tested. A geographically separated home-PC/remote-phone field test, long-duration reliability, standard PC ADB forwarding, scrcpy, Android Studio, and APK/EXE integration remain. See the [hardware validation record](docs/휴대형_USB_ADB_브리지_실기기_검증_2026-09-01.md), the [full reproducible bridge installer](scripts/install-pi-zero2-bridge.sh), the [locked-admin recovery guide](docs/라즈베리파이_관리자_복구.md), the [backup restore script](scripts/restore-pi-bridge-backup.sh), the [Windows safe-poweroff helper](scripts/roamadb-pi-poweroff.ps1), and the [detailed plan](docs/휴대형_USB_ADB_브리지_기획서.md).
 
 ## Verification status
 
@@ -56,7 +57,13 @@ Current status: hardware procurement/delivery pending, implementation and device
 - Actual local Tailscale address, registration countdown, and QR rendering in the Windows GUI: PASS.
 - Fold8 Android 17 / One UI 9 QR registration, phone authentication, Tailscale relay, USB-free ADB shell, and file round trip: PASS.
 - LTE/5G-only operation, another external Wi-Fi, screen lock, long-duration recovery, and Android 16 / One UI 8: **field validation required**.
-- Portable USB bridge power, hotspot, USB ADB, Tailscale, and remote PC E2E: **hardware required / not run**.
+- Portable USB bridge separate power, USB ADB, automatic USB tethering, hotspot fallback, Tailscale-address access, reboot recovery, and independent-network PC shell/file E2E: **PASS**.
+- Portable bridge powered only by the connected phone: **FAIL**; separate `PWR IN` power is required.
+- Portable bridge physical cable reconnect: **PASS**.
+- Portable bridge cold boot with the phone cable already connected: **PASS** after applying the Zero 2 W `dwc2` fixed-host configuration.
+- Portable bridge event-driven tether recovery with hotspot off: **PASS**; `rndis,adb`, Tailscale SSH, and USB ADB returned in about three seconds without a polling timer.
+- Portable bridge hardening: broad passwordless sudo removed; SSH public-key-only; SSH firewall starts before SSH and accepts only Tailscale/direct-USB recovery interfaces; Avahi and Bluetooth disabled.
+- Portable bridge geographically separated field test, long-duration reliability, PC standard ADB forwarding, scrcpy, Android Studio, and APK/EXE integration: **not run / follow-up**.
 
 Android may change the Wireless debugging connect port after Wi-Fi or debugging-state changes. In this spike, reopen Wireless debugging and save the new normal connect port in RoamADB before turning the relay on. Automatic mDNS port refresh remains a follow-up item.
 

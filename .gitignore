@@ -25,6 +25,8 @@ artifacts/
 *.pem
 *.log
 diagnostic-report-*.json
+.codex-remote-attachments/
+openai-codex-app-issue-draft-temp.md
 
 # OS files
 Thumbs.db
